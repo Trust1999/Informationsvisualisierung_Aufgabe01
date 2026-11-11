@@ -196,9 +196,10 @@ if __name__ == "__main__":
 
     from torch.utils.data import DataLoader
 
-    from trainer import MODEL_PATH, OUT_DIR, Trainer
-    from metricScore import MetricsStore
-    from evaluation import Evaluation
+    from classes import MODEL_PATH, OUT_DIR, Evaluation, LayoutStudy, MetricsStore, Trainer
+
+    CHOSEN_TSNE_PERPLEXITY = 30     # möglich: 5, 30, 100
+    CHOSEN_UMAP_N_NEIGHBORS = 15    # möglich: 5, 15, 100
 
 
     parser = argparse.ArgumentParser()
@@ -239,4 +240,27 @@ if __name__ == "__main__":
  
     metrics.add("aufgabe1", {"training": trainer.metrics(), "test": evaluation.metrics()})
     metrics.save()
+
+    
+    # ---- Aufgabe 2: Dimensionsreduktion (5.000 Test-Embeddings, Layouts, Qualitaet, Auswahl) --------------------
+    study = LayoutStudy(model, test_set)
+    # 3 x t-SNE, 3 x UMAP
+    study.compute_layouts()    
+
+    # 2.1
+    study.plot_parameter_study(os.path.join(OUT_DIR, "a2_parameterstudie.png"))
+
+    # 2.2: T(K), C(K)
+    study.evaluate()                                                                  
+    study.plot_quality(os.path.join(OUT_DIR, "a2_trust_continuity.png"))
+    study.print_scores()
+
+    # 2.3
+    study.choose(CHOSEN_TSNE_PERPLEXITY, CHOSEN_UMAP_N_NEIGHBORS)  
+
+    # 2.4
+    study.plot_chosen(os.path.join(OUT_DIR, "a2_gewaehlte_layouts.png"))              
+    metrics.add("aufgabe2", study.metrics())
+    metrics.save()
+
 
