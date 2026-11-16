@@ -196,11 +196,12 @@ if __name__ == "__main__":
 
     from torch.utils.data import DataLoader
 
-    from classes import MODEL_PATH, OUT_DIR, Evaluation, LayoutStudy, MetricsStore, Trainer
+    from classes import MODEL_PATH, OUT_DIR, Evaluation, LayoutStudy, MetricsStore, Trainer, ClusterStudy
 
     CHOSEN_TSNE_PERPLEXITY = 100     # möglich: 5, 30, 100
     CHOSEN_UMAP_N_NEIGHBORS = 15    # möglich: 5, 15, 100
 
+    DBSCAN_EPS = None   # None = Knie des k-Distanz-Plots, sonst Wert Anpassen nach Sichtung von output/a3_k_distanz.png
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--load", metavar="PFAD",
@@ -239,7 +240,7 @@ if __name__ == "__main__":
     evaluation.print_report()
  
     metrics.add("aufgabe1", {"training": trainer.metrics(), "test": evaluation.metrics()})
-    metrics.save()
+    #metrics.save()
 
     
     # ---- Aufgabe 2: Dimensionsreduktion (5.000 Test-Embeddings, Layouts, Qualitaet, Auswahl) --------------------
@@ -261,6 +262,24 @@ if __name__ == "__main__":
     # 2.4
     study.plot_chosen(os.path.join(OUT_DIR, "a2_gewaehlte_layouts.png"))              
     metrics.add("aufgabe2", study.metrics())
+    #metrics.save()
+
+
+    # ---- Aufgabe 3: Clustering
+    tsne_layout, umap_layout = study.chosen_layouts()
+    clusters = ClusterStudy(study.E, study.y, tsne_layout, umap_layout,
+                            layout_titles=(f"t-SNE (perplexity = {study.chosen['tsne']})",
+                                           f"UMAP (n_neighbors = {study.chosen['umap']})"),
+                            eps=DBSCAN_EPS)
+    clusters.compute_k_distances()
+    clusters.plot_k_distance(os.path.join(OUT_DIR, "a3_k_distanz.png"))
+    clusters.run_all()
+    clusters.compute_dbcv()
+    clusters.plot_all()
+    clusters.print_summary()
+    clusters.print_composition("hdbscan_eom")
+    clusters.print_composition("hdbscan_leaf")
+    metrics.add("aufgabe3", clusters.metrics())
     metrics.save()
 
 
