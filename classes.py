@@ -130,32 +130,35 @@ class Trainer:
 
     """
     Loss und Accuracy für Training und Validierung über die Epochen, Epoche des gespeicherten Modells markiert.
-    """            
+    """      
     def plot(self, path):
         h = self.history
         n_epochs = len(h["train_loss"])
         epochs = np.arange(1, n_epochs + 1)
         best = int(h["best_epoch"])
-        lr_drops = [e for e in range(2, n_epochs + 1) if h["lr"][e - 1] < h["lr"][e - 2] * 0.999]
 
         fig, axes = plt.subplots(1, 2, figsize=(12.5, 4.6))
-        for ax, key, ylabel in zip(axes, ("loss", "acc"), ("Loss (Cross-Entropy)", "Accuracy")):
+
+        for ax, key, ylabel in zip(axes,("loss", "acc"),("Loss (Cross-Entropy)", "Accuracy")):
             ax.plot(epochs, h[f"train_{key}"], marker="o", ms=3, label="Training (Train-Modus, Dropout aktiv)")
             ax.plot(epochs, h[f"val_{key}"], marker="o", ms=3, label="Validierung (eval-Modus)")
+
             ax.axvline(best, color="black", ls="--", lw=1, label=f"gespeichertes Modell (Epoche {best})")
             ax.scatter([best], [h[f"val_{key}"][best - 1]], color="black", zorder=5, s=35)
-            for k, e in enumerate(lr_drops):
-                ax.axvline(e - 0.5, color="grey", ls=":", lw=1, label="Lernrate × 0,3" if k == 0 else None)
+
             ax.set_xlabel("Epoche")
             ax.set_ylabel(ylabel)
             ax.xaxis.set_major_locator(MaxNLocator(integer=True))
             ax.grid(alpha=0.3)
             ax.legend()
+
         axes[0].set_title("Loss über die Epochen")
         axes[1].set_title("Accuracy über die Epochen")
+
         fig.tight_layout()
         fig.savefig(path, dpi=150)
         plt.close(fig)
+
 
     """
     Zusammenfassung in der Konsole ausgeben

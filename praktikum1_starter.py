@@ -198,7 +198,7 @@ if __name__ == "__main__":
 
     from classes import MODEL_PATH, OUT_DIR, Evaluation, LayoutStudy, MetricsStore, Trainer
 
-    CHOSEN_TSNE_PERPLEXITY = 30     # möglich: 5, 30, 100
+    CHOSEN_TSNE_PERPLEXITY = 100     # möglich: 5, 30, 100
     CHOSEN_UMAP_N_NEIGHBORS = 15    # möglich: 5, 15, 100
 
 
