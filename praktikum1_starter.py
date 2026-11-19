@@ -17,6 +17,22 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Subset
 from torchvision import datasets, transforms
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import ConfusionMatrixDisplay
+from sklearn.decomposition import PCA
+from sklearn.metrics.cluster import contingency_matrix
+from hdbscan.validity import validity_index
+
+import os
+import sys
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
+from clustering import Clustering
+from visualization import Visualization
+from dimensionality_reduction import DimensionalityReduction
+from cnn_evaluation import CNNEvaluation
+from result_logger import ResultLogger
 
 SEED = 0
 CLASSES = ["T-Shirt/Top", "Hose", "Pullover", "Kleid", "Mantel",
@@ -180,6 +196,89 @@ def show_images(dataset, indices, predictions=None, path=None, ncols=6):
     else:
         plt.show()
 
+def run_training(epochs, patience):
+    counter = 0
+    runtime = 0
+    losses_train = []
+    accs_train = []
+    losses_val = []
+    accs_val = []
+    loss_i = 0
+    acc_i =0
+    best_val_loss_epoch = 0
+    best_val_loss = float("inf")
+    
+    for i in range(epochs):
+        print(f"==== Epoch {i+1} ==== \n")
+        start = time.perf_counter()
+        loss_i, acc_i = run_epoch(model, train_loader, optimizer)
+        end = time.perf_counter()
+        
+        train_runtime = end - start
+        
+        losses_train.append(loss_i)
+        accs_train.append(acc_i)
+        print(f"## Training ({train_runtime:.2f} s) ## \n Loss: {loss_i:.4f} \n Accuracy: {acc_i:.4f}")
+        runtime += end - start
+        
+        start = time.perf_counter()
+        loss_i, acc_i = run_epoch(model, val_loader)
+        end = time.perf_counter()
+        
+        val_runtime = end - start
+        
+        scheduler.step(loss_i)
+        
+        losses_val.append(loss_i)
+        accs_val.append(acc_i)
+        print(f"## Validation ({val_runtime:.2f} s) ## \n Loss: {loss_i:.4f} \n Accuracy: {acc_i:.4f}\n")
+        
+        runtime += end - start
+        
+        if loss_i < best_val_loss:
+            best_val_loss = loss_i
+            best_val_loss_epoch = i
+            counter = 0
+            torch.save(model.state_dict(), "best_model.pth")
+
+        else:
+            counter += 1
+            
+        logger.add_epoch("ResNet18", i + 1, {
+            "train_loss": losses_train[-1],
+            "train_accuracy": accs_train[-1],
+            "val_loss": losses_val[-1],
+            "val_accuracy": accs_val[-1],
+            "train_runtime": train_runtime,
+            "val_runtime": val_runtime
+        })
+    
+        if counter >= patience:
+            print("Early Stopping!")
+            epochs = i+1
+            break
+        
+    
+    print(f"Runtime: {runtime:.2f} s\n")
+    
+    logger.add("CNN", "ResNet18", {
+        "runtime": runtime,
+        "best_val_loss": best_val_loss,
+        "best_val_loss_epoch": best_val_loss_epoch + 1,
+        "epochs_completed": len(losses_train)
+    })
+    
+    result_dict = {
+                    "epochs" : epochs,
+                    "losses_val": losses_val,
+                    "losses_train": losses_train,
+                    "best_val_loss_epoch": best_val_loss_epoch,
+                    "accs_val" : accs_val,
+                    "accs_train" : accs_train
+    }
+
+    
+    return result_dict
 
 if __name__ == "__main__":
     import argparse
@@ -192,6 +291,133 @@ if __name__ == "__main__":
     val_loader = DataLoader(val_set, batch_size=512)
 
     model, train_loader, optimizer, scheduler = make_run(train_set, weight_decay=0.01)
+    
+    vis = Visualization()
+    logger = ResultLogger()
+    cnn_eval = CNNEvaluation(logger)
+    
+    
+    train = False
+    ###################### Aufgabe 1 (CNN trainieren) ############################
+    
+    if train:
+        result = run_training(epochs = 50, patience = 6)
+        vis.plot_loss_accuracy(result["epochs"], result["losses_val"], result["losses_train"], result["best_val_loss_epoch"], result["accs_val"], result["accs_train"], save = True)
+        
+    test_loader = DataLoader(test_set, batch_size=512)
+    model.load_state_dict(torch.load(r"./best_model.pth", map_location=device))
+    all_labels, all_predictions, all_embeddings = extract(model, test_set)
+    
+    error_classes = cnn_eval.get_error_classes(all_labels, all_predictions, CLASSES)
+    
+    conf_matrix = confusion_matrix(all_labels, all_predictions)
+    disp = ConfusionMatrixDisplay(conf_matrix)
+    disp.plot()
+    
+    examples_num = 3
+    example_ctr = 0
+    for i in error_classes:
+        for j in range(len(all_labels)):
+            if all_labels[j] == i[0] and all_predictions[j] == i[1]:
+                show_images(test_set, [j], path = f"results/error_example_{str(i)}_{str(example_ctr)}.png")
+                example_ctr +=1
+            if example_ctr >= examples_num:
+                example_ctr = 0
+                break
+    
+    #############################################################
+    
+    ########### Aufgabe 2 (Dimensionsreduktion) #################
+    K = [5, 15, 30, 100, 500]
+    perplexity = [5,30,100]
+    neighbours = [5,15,100]
+    
+    sub = Subset(test_set, test_subsample())
+    y, pred, E = extract(model, sub)
+    dr = DimensionalityReduction(E)
+    reference = PCA(n_components=2).fit_transform(E)
+    
+    trustworthiness_tsne = []
+    continuity_tsne = []
+    trustworthiness_umap = []
+    continuity_umap = []
+    tsne_layout_dict = dict()
+    umap_layout_dict = dict()
+    
+    #tsne
+    for p in range(len(perplexity)):
+        layout_centered = dr.get_tsne_layout(reference, init='pca', random_state=0, perplexity=perplexity[p])
+        tsne_layout_dict[str(perplexity[p])] = layout_centered
+       
+        trustworthiness_tsne.append(dr.get_trustworthiness(layout_centered, K))
+        continuity_tsne.append(dr.get_continuity(layout_centered, K))
+    
+    #umap
+    for n in range(len(neighbours)):
+        layout_centered = dr.get_umap_layout(reference, init="spectral", random_state=0, n_neighbors = neighbours[n])
+        umap_layout_dict[str(neighbours[n])] = layout_centered
+        
+        trustworthiness_umap.append(dr.get_trustworthiness(layout_centered, K))
+        continuity_umap.append(dr.get_continuity(layout_centered, K))
+    
+    vis.plot_reduction_comparison(tsne_layout_dict, umap_layout_dict, y, CLASSES, save = True)
+    vis.plot_reduction_evaluation(trustworthiness_tsne, continuity_tsne, trustworthiness_umap, continuity_umap, K, save = True)
+    
+    #====Final Layouts
+    final_perplexity = 100
+    final_n = 100
+    
+    tsne_layout_final = tsne_layout_dict[str(final_perplexity)]
+    umap_layout_final = umap_layout_dict[str(final_n)]
+    
+    vis.plot_final_layouts(y, pred, tsne_layout_final, umap_layout_final, save = True)
+    #############################################################
+    
+    ########### Aufgabe 3 (Clustering) ##########################
+    
+    clust = Clustering(E)
+    
+    
+    epsilon = clust.get_epsilon_from_k_distances(n_neighbors=50, save_plot = True)
+    
+    labels_dict = { "K-Means" : clust.get_kmeans_labels(n_clusters=10, n_init=10, random_state=0),
+                    "DBSCAN" : clust.get_dbscan_labels(eps=epsilon, min_samples=50),
+                    "DBSCAN (0.5 x epsilon)" : clust.get_dbscan_labels(eps=0.5*epsilon, min_samples=50),
+                    "HDBSCAN (eom)" : clust.get_hdbscan_labels(min_cluster_size=50, min_samples=10, cluster_selection_method="eom"),
+                    "HDBSCAN (leaf)" : clust.get_hdbscan_labels(min_cluster_size=50, min_samples=10, cluster_selection_method="leaf")
+    }
+    
+    vis.plot_clusters(tsne_layout_final, umap_layout_final, labels_dict, save=True)
+    
+    print("HDBSCAN (eom)")
+    print(contingency_matrix(y, labels_dict["HDBSCAN (eom)"]))
+    print("\n")
+    print("HDBSCAN (leaf)")
+    print(contingency_matrix(y, labels_dict["HDBSCAN (leaf)"]))
+    print("\n")
+    
+    logger.add("Clustering", "HDBSCAN (eom)", {
+        "contingency_matrix": contingency_matrix(y, labels_dict["HDBSCAN (eom)"])
+    })
+
+    logger.add("Clustering", "HDBSCAN (leaf)", {
+        "contingency_matrix": contingency_matrix(y, labels_dict["HDBSCAN (leaf)"])
+    })
+    
+    for key in labels_dict.keys():
+        if key != "K-Means":
+
+            print(key)
+            print(validity_index(E.astype(np.float64), labels_dict[key]))
+            print("\n")
+            
+            logger.add("Clustering", key, {
+                "validity_index": validity_index(E.astype(np.float64), labels_dict[key])
+            })
+            
+    logger.save()
+    
+    #############################################################
 
     # TODO: max. 50 Epochen; je Epoche run_epoch (Train/Val), scheduler.step(val_loss);
     #       Early Stopping mit Patience 6; besten Zustand bei jeder Verbesserung per

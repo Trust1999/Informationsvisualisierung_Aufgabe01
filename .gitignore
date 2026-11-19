@@ -1,20 +1,16 @@
 .venv/
 venv/
 
-pycache/
+__pycache__/
 *.py[cod]
 
-.ipynb_checkpoints/
-
 data/
-output/
+results/
+_avg_/
 
-*.pt
 *.pth
-*.ckpt
 
-.DS_Store
+*_old.py
 
 Thumbs.db
-
-.vscode/
+Desktop.ini
