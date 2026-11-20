@@ -201,7 +201,7 @@ if __name__ == "__main__":
     CHOSEN_TSNE_PERPLEXITY = 100     # möglich: 5, 30, 100
     CHOSEN_UMAP_N_NEIGHBORS = 15    # möglich: 5, 15, 100
 
-    DBSCAN_EPS = None   # None = Knie des k-Distanz-Plots, sonst Wert Anpassen nach Sichtung von output/a3_k_distanz.png
+    DBSCAN_EPS = 8   # None = Knie des k-Distanz-Plots, sonst Wert Anpassen nach Sichtung von output/a3_k_distanz.png
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--load", metavar="PFAD",
@@ -273,6 +273,7 @@ if __name__ == "__main__":
                             eps=DBSCAN_EPS)
     clusters.compute_k_distances()
     clusters.plot_k_distance(os.path.join(OUT_DIR, "a3_k_distanz.png"))
+    clusters.plot_k_distance_eps(os.path.join(OUT_DIR, "a3_k_distanz_eps.png"))
     clusters.run_all()
     clusters.compute_dbcv()
     clusters.plot_all()
@@ -281,5 +282,3 @@ if __name__ == "__main__":
     clusters.print_composition("hdbscan_leaf")
     metrics.add("aufgabe3", clusters.metrics())
     metrics.save()
-
-

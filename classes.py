@@ -47,7 +47,7 @@ DBSCAN_MIN_SAMPLES = 50               # für Aufgabe 3: minPts von DBSCAN, zugle
 HDBSCAN_MIN_CLUSTER_SIZE = 50         # für Aufgabe 3: HDBSCAN
 HDBSCAN_MIN_SAMPLES = 10              # für Aufgabe 3: HDBSCAN (sklearn zählt den Punkt selbst mit)
 COMPOSITION_MIN_SHARE = 0.05          # für Aufgabe 3: Klassen unter diesem Anteil erscheinen nicht in der Konsolenausgabe
-NOISE_COLOR = "#9e9e9e"               # für Aufgabe 3: Rauschen (Label -1) grau
+NOISE_COLOR = "#9e9e9e"             # für Aufgabe 3: Rauschen (Label -1) grau
 
 
 """
@@ -294,8 +294,10 @@ class Evaluation:
     def print_report(self):
         print(f"\nTest-Accuracy: {self.accuracy:.4f}")
         print("F1 und Recall je Klasse:")
-        for name, f1_value, recall in zip(CLASSES, self.f1, self.recall):
-            print(f"  {name:<12s} F1 {f1_value:.4f}   Recall {recall:.4f}")
+        #for name, f1_value, recall, in zip(CLASSES, self.f1, self.recall):
+        for name, f1_value, in zip(CLASSES, self.f1):
+            #print(f"  {name:<12s} F1 {f1_value:.4f}   Recall {recall:.4f}")
+            print(f"  {name:<12s} F1 {f1_value:.4f}")
         print(f"Schwächste Klasse nach F1: {CLASSES[self.weakest_f1]} ({self.f1[self.weakest_f1]:.4f})")
         print(f"Schlechteste Diagonale (Recall): {self.worst_class['klasse']} ({self.worst_class['recall']:.4f}); "
               f"Fehler gehen an:")
@@ -317,7 +319,7 @@ class Evaluation:
             "f1_je_klasse": {name: float(v) for name, v in zip(CLASSES, self.f1)},
             "f1_macro": float(np.mean(self.f1)),
             "schwächste_klasse_nach_f1": CLASSES[self.weakest_f1],
-            "recall_je_klasse": {name: float(v) for name, v in zip(CLASSES, self.recall)},
+            #"recall_je_klasse": {name: float(v) for name, v in zip(CLASSES, self.recall)},
             "schlechteste_klasse_nach_recall": self.worst_class,
             "häufigste_paare": self.pairs,
             "confusion_matrix_zählungen": self.counts.tolist(),
@@ -574,8 +576,7 @@ class ClusterStudy:
 
     """
     k-Distanz-Plot: Distanz jedes Punktes zu seinem 50. Nachbarn (der Punkt selbst zählt als 1. Nachbar, wie bei
-    min_samples in DBSCAN), aufsteigend sortiert. ε = Knie der Kurve (größter Abstand zur Sehne vom ersten zum letzten
-    Punkt), falls im Konstruktor kein eps vorgegeben wurde.
+    min_samples in DBSCAN), aufsteigend sortiert. ε = Knie der Kurve, falls im Konstruktor kein eps vorgegeben wurde.
     """
     def compute_k_distances(self):
         nn = NearestNeighbors(n_neighbors=DBSCAN_MIN_SAMPLES).fit(self.E)
@@ -600,27 +601,51 @@ class ClusterStudy:
         return int(np.argmax(x - y))              # konvexe, steigende Kurve: Knie = größter Abstand unter der Sehne
 
     """
-    k-Distanz-Plot mit ε und ε · 0,5; links die ganze Kurve, rechts ein Ausschnitt bis 2 · ε.
+    k-Distanz-Plot zum Ablesen von ε, ohne eingezeichnetes ε: Distanz jedes Punktes zu seinem 50. Nachbarn, aufsteigend
+    sortiert.
     """
     def plot_k_distance(self, path):
         n = len(self.k_dist)
         ranks = np.arange(1, n + 1)
-        fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+        start = int(0.8 * n)
+        fig, axes = plt.subplots(1, 2, figsize=(13, 5.5))
         for ax, zoom in zip(axes, (False, True)):
             ax.plot(ranks, self.k_dist, color="tab:blue", label=f"Distanz zum {DBSCAN_MIN_SAMPLES}. Nachbarn")
-            ax.axhline(self.eps, color="tab:red", ls="-", lw=1.2, label=f"ε = {self.eps:.3f}")
-            ax.axhline(self.eps * 0.5, color="tab:orange", ls="--", lw=1.2, label=f"ε · 0,5 = {self.eps * 0.5:.3f}")
-            ax.scatter([self.knee_index + 1], [self.k_dist[self.knee_index]], color="black", zorder=5, s=35,
-                       label="Knie (größter Abstand zur Sehne)")
             if zoom:
-                ax.set_ylim(0, self.eps * 2)
-                ax.set_title(f"Ausschnitt bis 2 · ε")
+                ax.set_xlim(start, n)
+                ax.set_ylim(self.k_dist[start] * 0.98, self.k_dist[-1] * 1.02)
+                ax.set_title("Ausschnitt: die letzten 20 % der Punkte")
             else:
                 ax.set_title(f"k-Distanz-Plot (k = minPts = {DBSCAN_MIN_SAMPLES})")
             ax.set_xlabel("Punkte, aufsteigend nach k-Distanz sortiert")
             ax.set_ylabel(f"Distanz zum {DBSCAN_MIN_SAMPLES}. Nachbarn im 64D-Embedding")
-            ax.grid(alpha=0.3)
-            ax.legend()
+            ax.minorticks_on()
+            ax.grid(which="major", alpha=0.4)
+            ax.grid(which="minor", alpha=0.15)
+            ax.legend(loc="upper left")
+        fig.tight_layout()
+        fig.savefig(path, dpi=150)
+        plt.close(fig)
+ 
+    """
+    Derselbe k-Distanz-Plot mit dem gewählten ε und ε · 0,5. D
+    """
+    def plot_k_distance_eps(self, path):
+        n = len(self.k_dist)
+        fig, ax = plt.subplots(figsize=(8, 5.5))
+        ax.plot(np.arange(1, n + 1), self.k_dist, color="tab:blue", label=f"Distanz zum {DBSCAN_MIN_SAMPLES}. Nachbarn")
+        for value, color, linestyle, text in ((self.eps, "tab:red", "-", "ε"),
+                                              (self.eps * 0.5, "tab:orange", "--", "ε · 0,5")):
+            share = float((self.k_dist <= value).mean())
+            ax.axhline(value, color=color, ls=linestyle, lw=1.2,
+                       label=f"{text} = {value:.3f}: {share:.1%} der Punkte darunter")
+        ax.set_title(f"k-Distanz-Plot mit ε und ε · 0,5 (minPts = {DBSCAN_MIN_SAMPLES})")
+        ax.set_xlabel("Punkte, aufsteigend nach k-Distanz sortiert")
+        ax.set_ylabel(f"Distanz zum {DBSCAN_MIN_SAMPLES}. Nachbarn im 64D-Embedding")
+        ax.minorticks_on()
+        ax.grid(which="major", alpha=0.4)
+        ax.grid(which="minor", alpha=0.15)
+        ax.legend(loc="upper left")
         fig.tight_layout()
         fig.savefig(path, dpi=150)
         plt.close(fig)
