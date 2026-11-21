@@ -180,9 +180,13 @@ def show_images(dataset, indices, predictions=None, path=None, ncols=6):
     else:
         plt.show()
 
+# ---------------------------------------------------------------------------
 # Aufgabe 1
-
+# ---------------------------------------------------------------------------
 def plot_learning_curves(history, output_dir):
+    """Zeichnet die Trainings- und Validierungskurven fuer Loss und Accuracy ueber alle Epochen.
+    Die Messwerte werden als Linien und einzelne Punkte dargestellt; eine gestrichelte Linie
+    markiert die Epoche mit dem niedrigsten Validierungs-Loss. Speichert die Grafik als PNG."""
     import matplotlib.pyplot as plt
 
     epochs = range(1, len(history["train_loss"]) + 1)
@@ -210,6 +214,11 @@ def plot_learning_curves(history, output_dir):
 
 
 def evaluate_test(model, test_set, output_dir):
+    """Bewertet das fertig trainierte CNN einmalig auf dem gesamten Testdatensatz.
+    Berechnet Test-Accuracy, F1 je Klasse und eine zeilennormierte
+    Confusion Matrix. Ermittelt die schwaechste Klasse sowie die drei haeufigsten
+    gegenseitigen Verwechslungspaare, speichert Beispielbilder und die Matrix
+    und gibt die relevanten Kennzahlen als Dictionary zurueck."""
     import matplotlib.pyplot as plt
     from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, ConfusionMatrixDisplay
 
@@ -218,9 +227,6 @@ def evaluate_test(model, test_set, output_dir):
     accuracy = float(accuracy_score(y_true, y_pred))
     f1 = f1_score(y_true, y_pred, labels=list(range(10)), average=None)
     cm_counts = confusion_matrix(y_true, y_pred, labels=list(range(10)))
-    class_accuracy = np.divide(np.diag(cm_counts), cm_counts.sum(axis=1),
-                               out=np.zeros(10, dtype=float),
-                               where=cm_counts.sum(axis=1) != 0)
     print(f"\nTest-Accuracy: {accuracy:.4f}")
     print("F1 je Klasse:")
     for name, score in zip(CLASSES, f1):
@@ -233,7 +239,7 @@ def evaluate_test(model, test_set, output_dir):
     display = ConfusionMatrixDisplay(cm_normalized, display_labels=CLASSES)
     display.plot(ax=ax, cmap="Blues", values_format=".2f", xticks_rotation=45,
                  colorbar=True)
-    ax.set(title="Confusion Matrix (zeilennormiert)",
+    ax.set(title="Confusion Matrix",
            xlabel="Vorhergesagte Klasse", ylabel="Wahre Klasse")
     fig.tight_layout()
     fig.savefig(output_dir / "1_confusion_matrix.png", dpi=160)
@@ -270,7 +276,6 @@ def evaluate_test(model, test_set, output_dir):
 
     results = {
         "accuracy": accuracy,
-        "accuracy_per_class": {name: float(score) for name, score in zip(CLASSES, class_accuracy)},
         "f1_per_class": {name: float(score) for name, score in zip(CLASSES, f1)},
         "weakest_f1_class": CLASSES[weakest],
         "worst_recall_class": CLASSES[worst_recall],
@@ -283,9 +288,13 @@ def evaluate_test(model, test_set, output_dir):
     return results
 
 
+# ---------------------------------------------------------------------------
 # Aufgabe 2
-
+# ---------------------------------------------------------------------------
 def class_scatter(ax, Y, y, title, pred=None):
+    """Zeichnet ein zweidimensionales Layout mit nach Fashion-MNIST-Klasse gefaerbten Punkten.
+    Falls Vorhersagen uebergeben werden, erscheinen alle Punkte blasser und fehlklassifizierte 
+    Bilder werden groesser und mit schwarzem Rand hervorgehoben."""
     import matplotlib.pyplot as plt
     cmap = plt.get_cmap("tab10")
     for i in range(10):
@@ -304,6 +313,9 @@ def class_scatter(ax, Y, y, title, pred=None):
 
 
 def class_legend(fig, bottom=0.09):
+    """
+    Ergaenzt eine gemeinsame Legende fuer die zehn Fashion-MNIST-Klassen.
+    """
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
     cmap = plt.get_cmap("tab10")
@@ -315,6 +327,15 @@ def class_legend(fig, bottom=0.09):
 
 
 def run_dimensions(model, test_set, output_dir, selected_tsne, selected_umap):
+    """Fuehrt die vollstaendige Dimensionsreduktionsanalyse aus Aufgabe 2 durch.
+    Extrahiert 64D-CNN-Embeddings fuer die feste Stichprobe von 5.000 Testbildern.
+    Berechnet je drei t-SNE- und UMAP-Layouts und richtet sie per Procrustes
+    an einer 2D-PCA-Referenz aus. Speichert die Parameterstudie, bewertet fuer
+    K = 5, 15, 30, 100 und 500 die Trustworthiness und Continuity, gibt beide
+    Metriken tabellarisch aus und zeichnet die Qualitaetskurven. Hebt die 
+    Fehlklassifikationen in den ausgewaehlten Layouts hervor und speichert die 
+    entsprechenden Diagramme. Gibt Kennzahlen, 64D-Embeddings, wahre Labels und
+    die ausgewaehlten 2D-Layouts fuer Aufgabe 3 zurueck."""
     import matplotlib.pyplot as plt
     from sklearn.decomposition import PCA
     from sklearn.manifold import TSNE, trustworthiness
@@ -357,7 +378,7 @@ def run_dimensions(model, test_set, output_dir, selected_tsne, selected_umap):
             c = float(trustworthiness(Y, E, n_neighbors=k))
             quality[name][str(k)] = {"trustworthiness": t, "continuity": c}
 
-    # Kompakte Terminaltabellen: pro Metrik alle sechs Layouts und alle K-Werte.
+    # Tabelle: pro Metrik alle sechs Layouts und alle K-Werte.
     for metric, title in (("trustworthiness", "Trustworthiness"),
                           ("continuity", "Continuity")):
         print(f"\n{title}:")
@@ -368,8 +389,12 @@ def run_dimensions(model, test_set, output_dir, selected_tsne, selected_umap):
                 f"{values[str(k)][metric]:>10.4f}" for k in ks))
 
     fig, axes = plt.subplots(1, 2, figsize=(15, 5.5), sharex=True)
-    tsne_colors = {5: "#9ecae1", 30: "#3182bd", 100: "#08519c"}
-    umap_colors = {5: "#fdd0a2", 15: "#f16913", 100: "#a63603"}
+
+    blues = plt.get_cmap("Blues")
+    oranges = plt.get_cmap("Oranges")
+    tsne_colors = {p: blues(pos) for p, pos in zip((5, 30, 100), (0.3, 0.6, 0.9))}
+    umap_colors = {n: oranges(pos) for n, pos in zip((5, 15, 100), (0.3, 0.6, 0.9))}
+
     for ax, metric_key, title in (
         (axes[0], "trustworthiness", "Trustworthiness"),
         (axes[1], "continuity", "Continuity"),
@@ -421,9 +446,14 @@ def run_dimensions(model, test_set, output_dir, selected_tsne, selected_umap):
 
     return metrics, E, y, selected
 
-
+# ---------------------------------------------------------------------------
 # Aufgabe 3
+# ---------------------------------------------------------------------------
 def cluster_composition(y, labels):
+    """Ermittelt die Zusammensetzung jedes Clusters anhand der wahren Klassenlabels.
+    Beruecksichtigt auch das Rauschlabel -1. Fuer jeden Cluster werden die
+    Punktanzahl, der Anteil an der Gesamtstichprobe sowie absolute und relative
+    Haeufigkeiten der zehn Fashion-MNIST-Klassen als Dictionary zurueckgegeben."""
     result = {}
     for cluster_id in np.unique(labels):
         member_mask = labels == cluster_id
@@ -438,6 +468,10 @@ def cluster_composition(y, labels):
     return result
 
 def plot_contingency_matrix(y, labels, method_name, path):
+    """Erstellt fuer HDBSCAN eine zweigeteilte Contingency-Matrix als Heatmap.
+    Die linke Grafik zeigt absolute Klassenhaeufigkeiten pro Cluster bzw. Rauschen,
+    die rechte die innerhalb jedes Clusters normierten Klassenanteile. 
+    Speichert die Grafik und gibt die Matrizen zurueck."""
     import matplotlib.pyplot as plt
     from matplotlib.colors import Normalize
 
@@ -451,7 +485,6 @@ def plot_contingency_matrix(y, labels, method_name, path):
         counts, sizes, out=np.zeros_like(counts, dtype=float), where=sizes != 0
     )
 
-    # Auch bei vielen Leaf-Clustern lesbar bleiben: Hoehe dynamisch anpassen.
     fig_height = max(5.5, 0.38 * len(ids) + 2.1)
     fig, axes = plt.subplots(1, 2, figsize=(19, fig_height),
                              gridspec_kw={"width_ratios": [1, 1]},
@@ -471,7 +504,7 @@ def plot_contingency_matrix(y, labels, method_name, path):
         ax.set_xlabel("Wahre Klasse")
         ax.set_ylabel("HDBSCAN-Cluster / Rauschen")
         ax.set_title(title)
-        # Zahlen in den Zellen helfen beim Vergleichen ohne Farbschätzung.
+        
         fontsize = 7 if len(ids) <= 28 else 6
         for row_index in range(len(ids)):
             for class_index in range(len(CLASSES)):
@@ -496,6 +529,8 @@ def plot_contingency_matrix(y, labels, method_name, path):
 
 
 def plot_clusters(labels, selected_layouts, title, path):
+    """Visualisiert eine Clusterzuordnung in den beiden ausgewaehlten 2D-Layouts.
+    Speichert beide Streudiagramme gemeinsam in einer PNG-Datei."""
     import matplotlib.pyplot as plt
 
     fig, axes = plt.subplots(1, 2, figsize=(15, 6))
@@ -532,6 +567,11 @@ def plot_clusters(labels, selected_layouts, title, path):
 
 
 def dbcv_score(E, labels):
+    """Berechnet die DBCV-Qualitaet einer dichtebasierten Clusterzuordnung im 64D-Raum.
+    Zaehlt ausschliesslich echte Cluster, nicht Rauschpunkte (-1). Gibt bei
+    null Clustern 0.0 und bei genau einem Cluster NaN zurueck. Fuer mindestens
+    zwei Cluster berechnet hdbscan.validity.validity_index den DBCV-Wert
+    anhand der auf float64 konvertierten, nicht standardisierten Embeddings."""
     from hdbscan.validity import validity_index
 
     n_clusters = len(set(labels.tolist()) - {-1})
@@ -543,6 +583,14 @@ def dbcv_score(E, labels):
 
 
 def run_clustering(E, y, selected_layouts, output_dir):
+    """Fuehrt alle Clustering-Verfahren aus Aufgabe 3 auf den 64D-Embeddings aus.
+    Berechnet die sortierten Distanzen zum 50. Nachbarn und bestimmt DBSCAN-
+    Epsilon ueber den maximalen Abstand der normierten Kurve zur Diagonalen.
+    Speichert den normalen und normierten k-Distanz-Plot. Fuehrt k-Means,
+    DBSCAN mit Epsilon und halbem Epsilon sowie HDBSCAN mit EOM und Leaf aus.
+    Berechnet Clusterzahlen, Rauschanteile, DBCV (ausser fuer k-Means),
+    Klassenverteilungen und HDBSCAN-Contingency-Matrizen, speichert die
+    Clusterplots und gibt eine Ergebnistabelle sowie alle Kennzahlen zurueck."""
     import matplotlib.pyplot as plt
     from sklearn.cluster import KMeans, DBSCAN, HDBSCAN
     from sklearn.neighbors import NearestNeighbors
@@ -571,7 +619,7 @@ def run_clustering(E, y, selected_layouts, output_dir):
     ax.plot(np.arange(1, len(kdist) + 1), kdist, color="#205a95",
             label="Distanz zum 50. Nachbarn")
     ax.axhline(epsilon, color="#b52d31", linestyle="--",
-               label=f"ε = {epsilon:.4f} (Knick-Heuristik)")
+               label=f"ε = {epsilon:.4f} (Kneedle-Heuristik)")
     ax.axhline(epsilon * 0.5, color="#d48713", linestyle=":",
                label=f"ε · 0,5 = {epsilon * 0.5:.4f}")
     ax.scatter([knee_idx + 1], [epsilon], color="#b52d31", zorder=3)
@@ -619,7 +667,7 @@ def run_clustering(E, y, selected_layouts, output_dir):
     fig.savefig(output_dir / "3_k_distanz_plot_normiert.png", dpi=160)
     plt.close(fig)
 
-    print(f"  Knick-Heuristik: Punkt {knee_idx+1}/5000; ε={epsilon:.5f}, "
+    print(f"  Kneedle-Heuristik: Punkt {knee_idx+1}/5000; ε={epsilon:.5f}, "
           f"ε·0,5={epsilon*0.5:.5f}", flush=True)
 
     
@@ -677,6 +725,8 @@ def run_clustering(E, y, selected_layouts, output_dir):
             "contingency_matrix_plot": contingency_plot,
             "plot": f"3_{key}.png",
         }
+
+    # Tabelle zum Vergleich der Clusterverfahren
     print(f"\n{'Verfahren':<43} {'Cluster':>8} {'Rauschen':>10} {'DBCV':>10}")
     print("-" * 75)
     for key, title, _ in methods:
@@ -787,17 +837,3 @@ if __name__ == "__main__":
     (output_dir / "kennzahlen.json").write_text(json.dumps(all_metrics, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"\nAlle Ergebnisse gespeichert in: {output_dir.resolve()}", flush=True)
     print(f"Kennzahlen: {(output_dir / 'kennzahlen.json').resolve()}", flush=True)
-
-    # TODO: max. 50 Epochen; je Epoche run_epoch (Train/Val), scheduler.step(val_loss);
-    #       Early Stopping mit Patience 6; besten Zustand bei jeder Verbesserung per
-    #       torch.save(model.state_dict(), pfad) in eine eigene Datei speichern (z. B. pfad = "best_state.pt")
-    #       und nach dem Training zurueckladen: model.load_state_dict(torch.load(pfad, map_location=device)).
-    # TODO: ohne --load: nach dem Zurueckladen (sonst landen die Gewichte der letzten Epoche in der Datei) speichern, z. B.
-    #           torch.save({"state_dict": model.state_dict(), "history": history}, "best_model.pt")
-    #       mit --load: Training ueberspringen und laden:
-    #           ckpt = torch.load(args.load, map_location=device)
-    #           model.load_state_dict(ckpt["state_dict"]); history = ckpt["history"]
-    #       history nur mit Python-Listen/-Zahlen fuellen: run_epoch und time.perf_counter liefern schon
-    #       Python-floats, NumPy-Werte umwandeln (z. B. beste Epoche: int(np.argmin(...)));
-    #       torch.load laedt standardmaessig mit weights_only=True und lehnt NumPy-Objekte ab.
-    # Danach: einmalige Testauswertung, dann Aufgabe 2 und 3 mit diesem Modell.
