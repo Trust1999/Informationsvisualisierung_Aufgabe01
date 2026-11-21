@@ -192,8 +192,13 @@ def plot_learning_curves(history, output_dir):
         (axes[0], "train_loss", "val_loss", "Cross-Entropy-Loss", "Loss"),
         (axes[1], "train_accuracy", "val_accuracy", "Accuracy", "Accuracy"),
     ]:
-        ax.plot(epochs, history[train_key], label="Training")
-        ax.plot(epochs, history[val_key], label="Validierung")
+        train_line, = ax.plot(epochs, history[train_key], label="Training")
+        val_line, = ax.plot(epochs, history[val_key], label="Validierung")
+        # Zusaetzlich fuer jede Epoche einen Punkt in derselben Farbe zeichnen.
+        ax.scatter(epochs, history[train_key], color=train_line.get_color(),
+                   s=24, zorder=3)
+        ax.scatter(epochs, history[val_key], color=val_line.get_color(),
+                   s=24, zorder=3)
         ax.axvline(best_epoch, color="black", linestyle="--",
                    label=f"Bestes Modell (Epoche {best_epoch})")
         ax.set(xlabel="Epoche", ylabel=ylabel, title=title)
@@ -217,9 +222,9 @@ def evaluate_test(model, test_set, output_dir):
                                out=np.zeros(10, dtype=float),
                                where=cm_counts.sum(axis=1) != 0)
     print(f"\nTest-Accuracy: {accuracy:.4f}")
-    print("Accuracy und F1 je Klasse:")
-    for name, acc, score in zip(CLASSES, class_accuracy, f1):
-        print(f"  {name:15s}: Accuracy={acc:.4f}, F1={score:.4f}")
+    print("F1 je Klasse:")
+    for name, score in zip(CLASSES, f1):
+        print(f"  {name:<15s} {score:.4f}")
     weakest = int(np.argmin(f1))
     print(f"Schwaechste Klasse nach F1: {CLASSES[weakest]}")
 
@@ -323,16 +328,16 @@ def run_dimensions(model, test_set, output_dir, selected_tsne, selected_umap):
 
     for perplexity in (5, 30, 100):
         name = f"tSNE_{perplexity}"
-        print(f"Aufgabe 2: Berechne {name} ...", flush=True)
+        print(f"  Berechne {name} ...", flush=True)
         raw = TSNE(n_components=2, perplexity=perplexity,
                    init="pca", random_state=SEED).fit_transform(E)
         layouts[name] = align(raw, reference)
 
     for neighbors in (5, 15, 100):
         name = f"UMAP_{neighbors}"
-        print(f"Aufgabe 2: Berechne {name} ...", flush=True)
+        print(f"  Berechne {name} ...", flush=True)
         raw = umap.UMAP(n_components=2, n_neighbors=neighbors,
-                        init="spectral", random_state=SEED).fit_transform(E)
+                        init="spectral", random_state=SEED, n_jobs=1).fit_transform(E)
         layouts[name] = align(raw, reference)
 
     fig, axes = plt.subplots(2, 3, figsize=(17, 10))
@@ -344,14 +349,23 @@ def run_dimensions(model, test_set, output_dir, selected_tsne, selected_umap):
 
     ks = (5, 15, 30, 100, 500)
     quality = {}
-    print("Aufgabe 2: Trustworthiness / Continuity berechnen ...", flush=True)
+    print("\nTrustworthiness und Continuity werden berechnet ...", flush=True)
     for name, Y in layouts.items():
         quality[name] = {}
         for k in ks:
             t = float(trustworthiness(E, Y, n_neighbors=k))
             c = float(trustworthiness(Y, E, n_neighbors=k))
             quality[name][str(k)] = {"trustworthiness": t, "continuity": c}
-            print(f"  {name} K={k}: T={t:.4f}; C={c:.4f}", flush=True)
+
+    # Kompakte Terminaltabellen: pro Metrik alle sechs Layouts und alle K-Werte.
+    for metric, title in (("trustworthiness", "Trustworthiness"),
+                          ("continuity", "Continuity")):
+        print(f"\n{title}:")
+        print(f"  {'Layout':<13}" + "".join(f"{('K=' + str(k)):>10}" for k in ks))
+        print("  " + "-" * (13 + 10 * len(ks)))
+        for name, values in quality.items():
+            print(f"  {name:<13}" + "".join(
+                f"{values[str(k)][metric]:>10.4f}" for k in ks))
 
     fig, axes = plt.subplots(1, 2, figsize=(15, 5.5), sharex=True)
     tsne_colors = {5: "#9ecae1", 30: "#3182bd", 100: "#08519c"}
@@ -389,6 +403,8 @@ def run_dimensions(model, test_set, output_dir, selected_tsne, selected_umap):
     selected_umap_name = f"UMAP_{selected_umap}"
     selected = {selected_tsne_name: layouts[selected_tsne_name],
                 selected_umap_name: layouts[selected_umap_name]}
+    print(f"\nGewählte Layouts: t-SNE (Perplexity={selected_tsne}), "
+          f"UMAP (n_neighbors={selected_umap})", flush=True)
     fig, axes = plt.subplots(1, 2, figsize=(15, 6))
     for ax, (name, Y) in zip(axes, selected.items()):
         class_scatter(ax, Y, y, f"{name} (Fehler hervorgehoben)", pred=pred)
@@ -396,12 +412,280 @@ def run_dimensions(model, test_set, output_dir, selected_tsne, selected_umap):
     fig.savefig(output_dir / "2_fehlklassifikationen.png", dpi=160)
     plt.close(fig)
 
-    return {
+    metrics = {
         "sample_size": int(len(sub)),
         "embedding_dimension": int(E.shape[1]),
         "quality_by_layout_and_k": quality,
         "selected_layouts": {"tsne": selected_tsne_name, "umap": selected_umap_name},
     }
+
+    return metrics, E, y, selected
+
+
+# Aufgabe 3
+def cluster_composition(y, labels):
+    result = {}
+    for cluster_id in np.unique(labels):
+        member_mask = labels == cluster_id
+        counts = np.bincount(y[member_mask].astype(int), minlength=len(CLASSES))
+        total = int(member_mask.sum())
+        result[str(int(cluster_id))] = {
+            "size": total,
+            "fraction_of_all_points": float(total / len(labels)),
+            "class_counts": {name: int(n) for name, n in zip(CLASSES, counts)},
+            "class_fractions": {name: float(n / total) for name, n in zip(CLASSES, counts)},
+        }
+    return result
+
+def plot_contingency_matrix(y, labels, method_name, path):
+    import matplotlib.pyplot as plt
+    from matplotlib.colors import Normalize
+
+    ids = sorted(int(v) for v in np.unique(labels))
+    counts = np.stack([
+        np.bincount(y[labels == cluster_id].astype(int), minlength=len(CLASSES))
+        for cluster_id in ids
+    ])
+    sizes = counts.sum(axis=1, keepdims=True)
+    fractions = np.divide(
+        counts, sizes, out=np.zeros_like(counts, dtype=float), where=sizes != 0
+    )
+
+    # Auch bei vielen Leaf-Clustern lesbar bleiben: Hoehe dynamisch anpassen.
+    fig_height = max(5.5, 0.38 * len(ids) + 2.1)
+    fig, axes = plt.subplots(1, 2, figsize=(19, fig_height),
+                             gridspec_kw={"width_ratios": [1, 1]},
+                             constrained_layout=True)
+    row_names = ["Rauschen (-1)" if cluster_id == -1 else f"Cluster {cluster_id}"
+                 for cluster_id in ids]
+
+    for ax, matrix, title, colorbar_label, format_fn, maxval in [
+        (axes[0], counts, "Absolute Häufigkeiten", "Anzahl Bilder",
+         lambda v: str(int(v)), max(1, int(counts.max()))),
+        (axes[1], fractions, "Klassenanteile je Cluster", "Anteil",
+         lambda v: f"{v:.0%}", 1.0),
+    ]:
+        im = ax.imshow(matrix, aspect="auto", cmap="Blues", vmin=0, vmax=maxval)
+        ax.set_xticks(range(len(CLASSES)), labels=CLASSES, rotation=45, ha="right")
+        ax.set_yticks(range(len(ids)), labels=row_names)
+        ax.set_xlabel("Wahre Klasse")
+        ax.set_ylabel("HDBSCAN-Cluster / Rauschen")
+        ax.set_title(title)
+        # Zahlen in den Zellen helfen beim Vergleichen ohne Farbschätzung.
+        fontsize = 7 if len(ids) <= 28 else 6
+        for row_index in range(len(ids)):
+            for class_index in range(len(CLASSES)):
+                value = matrix[row_index, class_index]
+                ax.text(class_index, row_index, format_fn(value),
+                        ha="center", va="center", fontsize=fontsize,
+                        color="white" if value > 0.55 * maxval else "black")
+        cbar = fig.colorbar(im, ax=ax, fraction=0.045, pad=0.02)
+        cbar.set_label(colorbar_label)
+
+    fig.suptitle(f"HDBSCAN ({method_name}): Contingency Matrix", fontsize=14)
+    fig.savefig(path, dpi=160, bbox_inches="tight")
+    plt.close(fig)
+
+    return {
+        "cluster_ids_in_row_order": ids,
+        "class_names_in_column_order": list(CLASSES),
+        "counts": counts.astype(int).tolist(),
+        "fractions_per_cluster": fractions.tolist(),
+        "note": "Anteile pro Zeile (Cluster bzw. Rauschen) normiert",
+    }
+
+
+def plot_clusters(labels, selected_layouts, title, path):
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(1, 2, figsize=(15, 6))
+    cmap = plt.get_cmap("tab20b")
+    cluster_ids = sorted(int(v) for v in np.unique(labels) if v != -1)
+
+    # Anpassung Reihenfolge der Farben für bessere Erkennung der Cluster in den Diagrammen
+    cluster_colors = {
+        cluster_id: cmap(((rank % 5) * 4 + (rank // 5)) % 20)
+        for rank, cluster_id in enumerate(cluster_ids)
+    }
+    for ax, (layout_name, coords) in zip(axes, selected_layouts.items()):
+        noise = labels == -1
+        if np.any(noise):
+            ax.scatter(coords[noise, 0], coords[noise, 1], s=6, c="#999999",
+                       alpha=0.55, linewidths=0, label="Rauschen (-1)", rasterized=True)
+        for cluster_id in cluster_ids:
+            mask = labels == cluster_id
+            color = cluster_colors[cluster_id]
+            ax.scatter(coords[mask, 0], coords[mask, 1], s=7, c=[color],
+                       alpha=0.8, linewidths=0, rasterized=True)
+            cx, cy = np.median(coords[mask], axis=0)
+            ax.text(cx, cy, str(cluster_id), ha="center", va="center",
+                    fontsize=8, weight="bold", color="black",
+                    bbox={"boxstyle": "round,pad=0.14", "facecolor": "white",
+                          "edgecolor": "none", "alpha": 0.75})
+        ax.set(xlabel="Dimension 1", ylabel="Dimension 2", title=layout_name)
+        if np.any(noise):
+            ax.legend(loc="best", fontsize=8)
+    fig.suptitle(title)
+    fig.tight_layout()
+    fig.savefig(path, dpi=160)
+    plt.close(fig)
+
+
+def dbcv_score(E, labels):
+    from hdbscan.validity import validity_index
+
+    n_clusters = len(set(labels.tolist()) - {-1})
+    if n_clusters == 0:
+        return 0.0
+    if n_clusters == 1:
+        return float("nan")
+    return float(validity_index(E.astype(np.float64), labels))
+
+
+def run_clustering(E, y, selected_layouts, output_dir):
+    import matplotlib.pyplot as plt
+    from sklearn.cluster import KMeans, DBSCAN, HDBSCAN
+    from sklearn.neighbors import NearestNeighbors
+
+    assert E.shape == (5000, 64), f"Unerwartete Embedding-Form: {E.shape}"
+    assert len(y) == len(E)
+
+    print("Berechne den 50-Distanz-Plot ...", flush=True)
+    nn = NearestNeighbors(n_neighbors=50).fit(E)
+    distances, _ = nn.kneighbors(E)
+    kdist = np.sort(distances[:, -1])
+
+    # Kneedle-Heuristik: maximaler vertikaler Abstand zwischen
+    # normalisierter aufsteigender Kurve und Diagonale.
+    x = np.linspace(0.0, 1.0, len(kdist))
+    spread = float(kdist[-1] - kdist[0])
+    if spread <= 0:
+        raise ValueError("Der 50-Distanz-Plot ist konstant; epsilon nicht bestimmbar")
+    norm = (kdist - kdist[0]) / spread
+    knee_idx = int(np.argmax(x - norm))
+    epsilon = float(kdist[knee_idx])
+    if epsilon <= 0:
+        raise ValueError("Automatisch bestimmtes epsilon ist <= 0")
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.plot(np.arange(1, len(kdist) + 1), kdist, color="#205a95",
+            label="Distanz zum 50. Nachbarn")
+    ax.axhline(epsilon, color="#b52d31", linestyle="--",
+               label=f"ε = {epsilon:.4f} (Knick-Heuristik)")
+    ax.axhline(epsilon * 0.5, color="#d48713", linestyle=":",
+               label=f"ε · 0,5 = {epsilon * 0.5:.4f}")
+    ax.scatter([knee_idx + 1], [epsilon], color="#b52d31", zorder=3)
+    ax.set(title="50-Distanz-Plot zur Wahl von DBSCAN-ε",
+           xlabel="Punkte (nach 50-Nachbar-Distanz sortiert)",
+           ylabel="Euklidische Distanz im 64D-Embedding")
+    ax.grid(alpha=0.25)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(output_dir / "3_k_distanz_plot.png", dpi=160)
+    plt.close(fig)
+
+    x_knee = float(x[knee_idx])
+    y_knee = float(norm[knee_idx])
+    max_gap = float(x_knee - y_knee)
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+    ax.plot(x, norm, color="#205a95", linewidth=2,
+            label="Normierte 50-Nachbar-Distanzen")
+    ax.plot([0, 1], [0, 1], color="#6b7280", linestyle="--", linewidth=1.8,
+            label="Diagonale y = x")
+    ax.plot([x_knee, x_knee], [y_knee, x_knee], color="#b52d31", linewidth=2.2,
+            label=f"Max. Distanz = {max_gap:.4f}")
+    ax.scatter([x_knee], [y_knee], color="#205a95", s=45, zorder=4)
+    ax.scatter([x_knee], [x_knee], color="#b52d31", s=45, zorder=4)
+    ax.annotate(
+        f"Knick\nε = {epsilon:.4f}",
+        xy=(x_knee, y_knee),
+        xytext=(10, -28),
+        textcoords="offset points",
+        fontsize=9,
+        color="#b52d31"
+    )
+    ax.set(
+        title="Normierter 50-Distanz-Plot mit maximaler Distanz zur Diagonalen",
+        xlabel="Normierter Rang der sortierten Punkte",
+        ylabel="Normierte 50-Nachbar-Distanz"
+    )
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.set_aspect("equal", adjustable="box")
+    ax.grid(alpha=0.25)
+    ax.legend(loc="lower right")
+    fig.tight_layout()
+    fig.savefig(output_dir / "3_k_distanz_plot_normiert.png", dpi=160)
+    plt.close(fig)
+
+    print(f"  Knick-Heuristik: Punkt {knee_idx+1}/5000; ε={epsilon:.5f}, "
+          f"ε·0,5={epsilon*0.5:.5f}", flush=True)
+
+    
+    methods = [
+        ("kmeans", "k-Means (k=10)", KMeans(n_clusters=10, n_init=10, random_state=SEED)),
+        ("dbscan_epsilon", f"DBSCAN (ε={epsilon:.3f}, minPts=50)",
+         DBSCAN(eps=epsilon, min_samples=50)),
+        ("dbscan_half_epsilon", f"DBSCAN (ε={epsilon*0.5:.3f}, minPts=50)",
+         DBSCAN(eps=0.5 * epsilon, min_samples=50)),
+        ("hdbscan_eom", "HDBSCAN (EOM)",
+         HDBSCAN(min_cluster_size=50, min_samples=10, cluster_selection_method="eom", copy=False)),
+        ("hdbscan_leaf", "HDBSCAN (Leaf)",
+         HDBSCAN(min_cluster_size=50, min_samples=10, cluster_selection_method="leaf", copy=False)),
+    ]
+    results = {
+        "embedding_dimension": int(E.shape[1]),
+        "sample_size": int(len(E)),
+        "clustering_space": "64D CNN embeddings (Euclidean, not standardized)",
+        "dbscan_parameter_choice": {
+            "min_samples": 50,
+            "epsilon": epsilon,
+            "epsilon_half": float(epsilon / 2),
+            "epsilon_selection": "Knick-Heuristik: Maximum von x - norm(k-distance); visuell pruefen",
+            "knee_sorted_point_index_1_based": knee_idx + 1,
+            "k_distance_image": "3_k_distanz_plot.png",
+        },
+        "methods": {},
+    }
+    print("\nClustering und DBCV werden berechnet ...", flush=True)
+    for key, title, estimator in methods:
+        labels = estimator.fit_predict(E)
+        cluster_ids = sorted(int(v) for v in np.unique(labels) if v != -1)
+        noise_n = int(np.sum(labels == -1))
+        score = dbcv_score(E, labels) if key != "kmeans" else None
+        plot_clusters(labels, selected_layouts, title,
+                      output_dir / f"3_{key}.png")
+        contingency = None
+        contingency_plot = None
+        if key in ("hdbscan_eom", "hdbscan_leaf"):
+            contingency_plot = f"3_{key}_contingency_matrix.png"
+            contingency = plot_contingency_matrix(
+                y, labels, "EOM" if key == "hdbscan_eom" else "Leaf",
+                output_dir / contingency_plot
+            )
+        results["methods"][key] = {
+            "cluster_count": len(cluster_ids),
+            "cluster_ids": cluster_ids,
+            "noise_count": noise_n,
+            "noise_fraction": float(noise_n / len(labels)),
+            "dbcv": score if score is None or np.isfinite(score) else None,
+            "dbcv_note": ("nicht verlangt fuer k-Means" if key == "kmeans" else
+                          "nan: nur ein Cluster" if np.isnan(score) else None),
+            "class_composition_per_cluster": cluster_composition(y, labels),
+            "contingency_matrix": contingency,
+            "contingency_matrix_plot": contingency_plot,
+            "plot": f"3_{key}.png",
+        }
+    print(f"\n{'Verfahren':<43} {'Cluster':>8} {'Rauschen':>10} {'DBCV':>10}")
+    print("-" * 75)
+    for key, title, _ in methods:
+        r = results["methods"][key]
+        dbcv = r["dbcv"]
+        dbcv_text = f"{dbcv:.4f}" if dbcv is not None else "-"
+        print(f"{title:<43} {r['cluster_count']:>8} "
+              f"{r['noise_fraction']:>9.1%} {dbcv_text:>10}")
+    return results
 
 if __name__ == "__main__":
     import argparse
@@ -420,11 +704,13 @@ if __name__ == "__main__":
 
     model, train_loader, optimizer, scheduler = make_run(train_set, weight_decay=0.01)
 
+    print("\033[1;4mAufgabe 1 - CNN-Training und Testauswertung\033[0m")
+
     if args.load:
         checkpoint = torch.load(args.load, map_location=device, weights_only=True)
         model.load_state_dict(checkpoint["state_dict"])
         history = checkpoint["history"]
-        print(f"Modell und Trainingshistorie geladen: {args.load}", flush=True)
+        print(f"Modell und Trainingshistorie geladen: {args.load} (Training übersprungen)", flush=True)
     else:
         history = {"train_loss": [], "train_accuracy": [], "val_loss": [],
                    "val_accuracy": [], "epoch_seconds": []}
@@ -454,14 +740,14 @@ if __name__ == "__main__":
                   f"{epoch_seconds:.1f}s | ohne Verbesserung: {epochs_without_improvement}/6",
                   flush=True)
             if epochs_without_improvement >= 6:
-                print("Early Stopping", flush=True)
+                print("Early Stopping: 6 Epochen in Folge ohne neues Minimum des Val-Loss.", flush=True)
                 break
         history["total_seconds"] = float(time.perf_counter() - total_start)
         history["best_epoch"] = int(best_epoch)
         history["best_val_loss"] = float(best_val_loss)
         model.load_state_dict(torch.load(best_state_path, map_location=device, weights_only=True))
         torch.save({"state_dict": model.state_dict(), "history": history}, "best_model.pt")
-        print(f"Bestes Modell: Epoche {best_epoch}; best_model.pt gespeichert", flush=True)
+        print("Gespeichert: best_model.pt", flush=True)
 
     # Auswahl der beiden Layouts fuer die Fehlerdarstellung (Aufgabe 2.4).
     # t-SNE: Perplexity (erlaubt: 5, 30 oder 100).
@@ -469,18 +755,38 @@ if __name__ == "__main__":
     # UMAP: n_neighbors (erlaubt: 5, 15 oder 100).
     selected_umap = 15
 
+    
+    best = int(history["best_epoch"])
+    n_epochs = len(history["train_loss"])
+    print(f"\nBestes Modell: Epoche {best} von {n_epochs} "
+          f"(Val Loss {history['val_loss'][best - 1]:.4f}, "
+          f"Val Acc {history['val_accuracy'][best - 1]:.4f}, "
+          f"Train Loss {history['train_loss'][best - 1]:.4f}, "
+          f"Train Acc {history['train_accuracy'][best - 1]:.4f})")
+    epoch_times = history.get("epoch_seconds", [])
+    if epoch_times:
+        print(f"Laufzeit: gesamt {history['total_seconds']:.1f} s, "
+              f"im Mittel {np.mean(epoch_times):.1f} s je Epoche")
+
     plot_learning_curves(history, output_dir)
     test_metrics = evaluate_test(model, test_set, output_dir)  # Test einmalig auswerten
-    dimension_metrics = run_dimensions(model, test_set, output_dir, selected_tsne, selected_umap)
+
+    print("\033[1;4m\nAufgabe 2 - Dimensionsreduktion\033[0m")
+    dimension_metrics, E, y, selected_layouts = run_dimensions(
+        model, test_set, output_dir, selected_tsne, selected_umap)
+
+    print("\033[1;4m\nAufgabe 3 - Clustering\033[0m")
+    cluster_metrics = run_clustering(E, y, selected_layouts, output_dir)
 
     # Kennzahlen speichern
     all_metrics = {
         "aufgabe_1": {"training": history, "test": test_metrics},
         "aufgabe_2": dimension_metrics,
-        "aufgabe_3": {},
+        "aufgabe_3": cluster_metrics,
     }
     (output_dir / "kennzahlen.json").write_text(json.dumps(all_metrics, indent=2, ensure_ascii=False), encoding="utf-8")
-    print(f"\nAlle Ergebnisse in {output_dir.resolve()}", flush=True)
+    print(f"\nAlle Ergebnisse gespeichert in: {output_dir.resolve()}", flush=True)
+    print(f"Kennzahlen: {(output_dir / 'kennzahlen.json').resolve()}", flush=True)
 
     # TODO: max. 50 Epochen; je Epoche run_epoch (Train/Val), scheduler.step(val_loss);
     #       Early Stopping mit Patience 6; besten Zustand bei jeder Verbesserung per
