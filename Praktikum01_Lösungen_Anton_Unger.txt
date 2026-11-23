@@ -1,0 +1,231 @@
+Aufgabe 01
+--------------------------------------------------------------------------------------------------------------------------------------
+Teilaufgabe01
+Loss:		Loss misst den Vorhersagefehler und wird durch Backpropagation minimiert.
+		Lossfunktion 
+		(VL02, S.22)
+
+Accuracy:	Keine genauen Angaben in Folien.
+
+Train:	 	Modellparameter lernen
+		(VL02, S.07)
+
+Validation:	Hyperparameter wählen
+		(VL02, S.07)
+
+Overfitting: 	Trainingsfehler klein, Validierungsfehler groß → Modell lernt das Rauschen der Trainingsdaten auswendig.
+		--> Overfitting beginnt nach der 7. Epoche
+		(VL02, S.07)
+--------------------------------------------------------------------------------------------------------------------------------------
+Teilaufgabe02
+F1-Wert		Keine genauen Angaben in Folien.
+		Funktion
+		(VL02, S.07)
+
+Auswertung	F1 je Klasse:
+  		T-Shirt/Top     0.8564
+  		Hose            0.9849
+  		Pullover        0.8596
+  		Kleid           0.9100
+  		Mantel          0.8614
+  		Sandale         0.9731
+  		Hemd            0.7441
+  		Sneaker         0.9539
+  		Tasche          0.9766
+  		Stiefelette     0.9599
+		-->Schwächste Klasse nach F1: Hemd mit 0.7441
+--------------------------------------------------------------------------------------------------------------------------------------
+Teilaufgabe03
+Confusion Matrix	Keine genauen Angaben in Folien.
+
+Auswertung	Drei häufigste Verwechslungspaare (ungerichtet):
+  		1. T-Shirt/Top <-> Hemd: 196 insgesamt (T-Shirt/Top->Hemd: 101, Hemd->T-Shirt/Top: 95)
+  		2. Pullover <-> Hemd: 120 insgesamt (Pullover->Hemd: 39, Hemd->Pullover: 81)
+  		3. Pullover <-> Mantel: 117 insgesamt (Pullover->Mantel: 34, Mantel->Pullover: 83)
+		--> ist nicht symmetrisch
+
+		Verwechslungspaar 1: 	381 richtig erkannt
+					565 falsch erkannt (auch T-Shirt)
+					454 falsch erkannt (Kleid)
+
+		Verwechslungspaar 2:	66 richtig erkannt
+					244 falsch erkannt (auch Pullover)
+					670 falsch erkannt (T-Shirt)
+
+		Verwechslungspaar 3:	851 richtig erkannt
+					25 richtig erkannt
+					893 richtig erkannt
+
+		--> Fehler liegt nicht beim Model, Label ist mehrdeutig
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Aufgabe 02
+
+--------------------------------------------------------------------------------------------------------------------------------------
+Teilaufgabe01
+t-SNE		- Idee: Wer im HD-Raum Nachbar ist, soll auch in 2D Nachbar sein
+		- Nachbarschaften werden in beiden Räumen als Wahrscheinlichkeiten beschrieben
+		- Punkte in 2D so lange verschieben, bis beide Nachbarschaften übereinstimmen
+		Ergebnis: lokale Struktur treu, globale Abstände und Clustergrößen nicht
+		(VL03, S.43)
+
+perplexity	- Perplexity ≈ effektive Nachbarzahl im Gauß-Kernel
+		- niedrig → wenige Nachbarn, betont lokale Struktur
+		- hoch → viele Nachbarn, betont globalere Struktur
+		- zu hoch (nahe der Punktzahl) → fast alle Punkte
+		- zählen als Nachbarn, Cluster rücken zusammen
+		(VL03, S.47)	
+
+UMAP		- Nicht-linear, graphbasiert (fuzzy-topologische Struktur)
+		- Baut einen gewichteten k-NN-Graphen und optimiert ein niedrigdimensionales Layout
+		- Erhält globale Struktur oft besser als t-SNE — laut Kobak & Linderman (2021) v. a. wegen der spektralen Initialisierung
+		- Deutlich schneller, skaliert auf große Daten, kann neue Punkte einbetten
+		- Heute häufige Standardwahl für große Embedding-Mengen.
+		(VL03, S.50)
+
+n_neighbors	- klein → lokal
+		- groß → global
+		(VL03, S.50)
+--------------------------------------------------------------------------------------------------------------------------------------
+Teilaufgabe02
+
+Trustworthiness:	bestraft falsche Nachbarn — in 2D nah, im HD-Raum aber fern
+			(VL03, S.59)
+
+Continuity:	bestraft verlorene Nachbarn — echte HD-Nachbarn, in 2D auseinandergerissen
+		(VL03, S.59)
+
+Trustworthiness und Continuity messen lokale Treue.
+
+K:		Rang im HD-Raum
+		(VL03, S.59)
+--------------------------------------------------------------------------------------------------------------------------------------
+Teilaufgabe03
+
+t-SNE-Layout:	Perplexity 100, weil:
+			- Trustworthiness bei allen K das höchste
+			- Continuity bei allen K das höchste
+
+
+UMAP-Layout	neighbors 15, weil:
+			- Trustworthiness bei fasst allen K das beste (außer letzten beiden)
+			- Continuity bei allen K das höchste (vor allem beim letzten)
+--------------------------------------------------------------------------------------------------------------------------------------
+Teilaufgabe05
+
+- Ist K größer als der Layoutparameter, bewertet man nicht nur unmittelbare Nachbarschaft, sondern auch weiter entfernte Punkte
+	Trustworthiness: Es wird geprüft, ob die im Layout gefundenen Nachbarn auch im ursprünglichen hochdimensionalen Raum tatsächlich
+			Nachbarn waren. Bei größerem K werden auch weiter entfernte Nachbarn berücksichtigt, wodurch die Bewertung
+			anspruchsvoller wird.
+	Continuity: Es wird geprüft, ob ursprüngliche Nachbarn im Layout erhalten geblieben sind. Bei größerem K müssen auch weiter entfernte
+		    Nachbarn im Layout wiedergefunden werden.
+	--> aus Diagramm: die Werte sinken bei größeren K für alle Layouts. Deutlich ist der Rückgang bei t-SNE mit Perplexity 5: Die
+			  Trustworthiness sinkt bei K=500 stark auf etwa 0,91 und die Continuity auf etwa 0,967. Bei den anderen Layouts ist
+			  der Rückgang deutlich geringer. Die UMAP-Layouts bleiben vergleichsweise stabil, auch bei größeren K.
+	--> Die Layouts optimieren vor allem die lokale Nachbarschaft. Bei kleinen K\) ist die Qualität deshalb hoch. Werden mehr Nachbarn
+	    bewertet, müssen auch größere räumliche Beziehungen erhalten bleiben, die durch die lokale Optimierung nicht zwingend gut 		    abgebildet werden.
+
+- Die Fehlerklassen liegen eher am Rand, vereinzelt gibt es aber Werte die auch mehr in den Cluster liegen.
+
+- Aussagen über die sechs Layouts:
+	- Es gibt Klassen, die sich relativ gut voneinander trennen lassen.
+	- Einige Klassen weisen deutliche Ähnlichkeiten auf und liegen deshalb näher zusammen oder überschneiden sich.
+	- Die Daten besitzen eine Clusterstruktur und sind nicht vollständig zufällig verteilt.
+	- Einige Klassen sind deutlich schwieriger zu unterscheiden als andere, was sich in der Vermischung der Punkte zeigt.
+
+- Zusammenhang mit den Parametern:
+	- t-SNE Perplexity 5 --> Sehr lokale Strukturen, Gruppen stärker verteilt und weniger stabil dargestellt.
+	- t-SNE Perplexity 30 --> Kompromiss zwischen lokalen und etwas größeren Strukturen.
+	- t-SNE Perplexity 100 --> Größere Nachbarschaften werden berücksichtigt, Klassenstrukturen wirken teilweise kompakter.
+
+	- UMAP n_neighbors=5 --> Sehr lokale Struktur, einzelne Gruppen und Übergänge können anders dargestellt werden.
+	- UMAP n_neighbors=15 --> Ausgewogenere lokale Struktur.
+	- UMAP n_neighbors=100 --> Größere Strukturen werden stärker berücksichtigt, das Layout wirkt kompakter bzw. Gruppen können sich
+				   anders anordnen.
+
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+Aufgabe 03
+
+--------------------------------------------------------------------------------------------------------------------------------------
+Teilaufgabe01
+k-Means:	Ziel: minimiert die Summe der quadrierten Abstände aller Punkte zum Zentroiden ihres Clusters bzw. die Within-Cluster Sum of 		Squares (WCSS)
+		(VL03, S.10)
+--------------------------------------------------------------------------------------------------------------------------------------
+Teilaufgabe02
+DBSCAN:		folgt der Dichte → erkennt die beiden Monde korrekt als getrennte, beliebig geformte Cluster.
+		(VL03, S.13)
+
+		Kern: hat mindestens minPts Punkte im Radius (inkl. sich selbst)
+		Rand: liegt im epsilon-Radius eines Kerns, ist aber selbst kein Kern
+		Rauschen: weder Kern noch Rand → Ausreißer
+		Epsilon: Radius
+
+k-Distanz-Plot:	- Für jeden Punkt: Distanz zum k-ten Nachbarn (minPts). 
+		- Diese Distanzen aufsteigend sortieren .
+		- Die Kurve läuft flach und biegt dann scharf nach oben ab — diese Abbiegestelle ist das „Knie" (dicht = Nachbar nah → 				flacher Teil, Ausreißer = Nachbar weit → steiler Teil).
+		- Höhe des Knies = gute Wahl für : links davon werden Punkte Kerne, rechts Nicht-Kerne
+
+Epsilon Bestimmen:	- mittels k-Distanz-Plot:
+			- größter Abstand zur geraden
+			--> Epsilon ist rund 8
+
+0.5 Epsilon:	- es Entstehen mehr Cluster aber auch mehr rauschen
+		--> Wenn Epsilon halbiert wird, wird die Nachbarschaft kleiner. Dadurch befinden sich wesentlich weniger Punkte innerhalb des 		   erlaubten Radius. Viele Punkte erfüllen deshalb die Bedingung für einen Kernpunkt nicht mehr. Sie werden als Rauschen 		   klassifiziert.
+--------------------------------------------------------------------------------------------------------------------------------------
+Teilaufgabe03
+HDBSCAN:	Verallgemeinert DBSCAN über alle Dichte-Ebenen statt eines festen Epsilon.
+		Die Idee in drei Schritten
+		1. lokale Dichte pro Punkt schätzen (wie nah sitzt die Nachbarschaft?)
+		2. daraus eine Hierarchie von Clustern über alle Dichte-Schwellen bauen
+		3. automatisch die stabilsten Cluster herausziehen
+		(VL03, S.22)
+
+HDBSCAN-eom:	EOM (Excess of Mass, Default): wählt die persistentesten Cluster → wenige, große, dichteadaptiv
+		(VL03, S.31)
+
+HDBSCAN-leaf:	wählt die Blätter des Baums → viele, feine, gleich granulare Cluster
+		(VL03, S.31)
+
+Auswertung:
+Verfahren                                    Cluster   Rauschen       DBCV
+HDBSCAN (EOM)                                      2      3.3%     0.3368
+HDBSCAN (Leaf)                                     9     61.0%     0.1305
+--------------------------------------------------------------------------------------------------------------------------------------
+Teilaufgabe04
+DBCV:	- Silhouette & Co. bevorzugen kompakte, kugelige Cluster und kennen kein Rauschen
+	- DBCV (Density-Based Clustering Validation; Moulavi et al., SDM 2014) überträgt die Silhouette-Idee auf die Mutual Reachability 	  Distance: größte Lücke im Cluster gegen Abstand zum nächsten Cluster
+	- Rauschpunkte zählen im Nenner mit und senken den Wert
+	- -1 schlecht - 1 gut
+	(VL03, S33)
+
+Auswertung
+Verfahren         		DBCV                                     
+DBSCAN (ε=8.229, minPts=50)     0.2771
+DBSCAN (ε=4.115, minPts=50)     0.1103
+HDBSCAN (EOM)                   0.3368
+HDBSCAN (Leaf)                  0.1305
+--------------------------------------------------------------------------------------------------------------------------------------
+Teilaufgabe05
+Interpretation k-Distanz-Plot:	- Epsilon ist bei ungefähr bei 8
+
+Der Unterschied zwischen beiden HDBSCAN-Varianten:
+Eigenschaft	EOM	Leaf
+Cluster		2	9
+Rauschpunkte	166	3.051
+Rauschanteil	3,32 %	61,02 %
+DBCV		0,337	0,130
+
+--> EOM:	Bildet zwei große Cluster,erkennt die grobe Trennung zwischen Schuhen und anderen Kleidungsstücken, Ordnet fast alle Punkte 		einem Cluster zu und Liefert den besten DBCV-Wert.
+--> Leaf:	Bildet neun kleinere Cluster, Kann viele tatsächliche Klassen differenzierter trennen, Ordnet aber einen großen Teil der 		Punkte keinem Cluster zu und Liefert einen deutlich schlechteren DBCV-Wert.
+
+Auswertung:	- Am besten ist HDBSCAN (EOM) mit eine DBCV von 0.3368
+		--> erkennt schlecht die Klassen hat aber sehr geringes Rauschen
+
+Vergleich Layouts:	Sehen ähnlich aus
+
+
+
+
+
