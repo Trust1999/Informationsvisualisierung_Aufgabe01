@@ -1,0 +1,57 @@
+Antworten auf Fragen:
+1.1) Wo beginnt Overfitting, woran erkennt ihr es?
+	- beginnt ab Epoche 7, ab da wird Trainingsloss immer kleiner, wobei der Validationloss ansteigt (VL2 F7)
+
+1.2) Welche Klasse ist am schwächsten
+	- Die Klasse 'Hemd'
+
+1.3) Welche Klasse wird am schlechtesten erkannt (Diagonale), und an welche Klassen gehen ihre Fehler?
+	- Hemd, Fehler gehen an T-Shirt/Top, Mantel, Pullover, Kleid, Tasche
+
+     Ist die Verwechslung symmetrisch?
+	- Nein
+
+     Würdet ihr diese Bilder selbst richtig zuordnen? Liegt der Fehler beim Modell oder ist das Bild bzw. Label mehrdeutig?
+	- eher nicht, Fehler liegt nicht unbedingt am Modell, sondern eher an mehrdeutigen Bildern oder Label
+
+
+
+2.5) Was passiert mit der Qualität, wenn K größer ist als der Parameter, und warum?
+	- Ist K größer als der Projektionsparameter, werden bei der Bewertung auch Nachbarschaften betrachtet, die beim Erstellen des Layouts nicht im gleichen Umfang priorisiert wurden
+	- Dadurch können Trustworthiness und Continuity sinken
+	- gut erkennbar im Trustworthiness-Continuity Diagramm
+
+     Liegen die Fehlklassifikationen an den Grenzen der Klassengruppen im Layout oder mitten in fremden Klassengruppen?
+	- Kommt ein bisschen darauf an, welche Klassen man betrachtet: bei Hose, Tasche, Sneaker, Sandale und Stiefelette eher am Rand. Bei den anderen Klassen zum Teil auch mittendrin
+
+     Welche Aussage über die Daten hält über alle sechs Layouts hinweg, welche hängt am Parameter?
+	- Die grundlegende Nachbarschaftsstruktur bleibt über alle sechs Layouts relativ stabil
+	- Bestimmte Klassen sind klar voneinander getrennt, während ähnliche Oberteilklassen häufig überlappen 
+	- Die genaue Form, Position und Aufteilung der Gruppen verändert sich dagegen mit der Wahl von Perplexity und n_neighbors
+
+
+
+3.5) Interpretiert den k-Distanz-Plot und die Unterschiede zwischen ε und ε · 0,5 (VL3 F: 19)
+	- Der k-Distanz-Plot zeigt einen längeren, relativ flachen Bereich und einen stärkeren Anstieg im rechten Teil. 
+	- Das deutet darauf hin, dass die meisten Datenpunkte vergleichsweise dichte Nachbarschaften besitzen, während einige Punkte weniger dicht eingebettet sind
+	- ε an sich zu groß gewählt, da Cluster verschmelzen, dafür weniger Rauschen
+	- ε · 0,5, erkennt zwar mehr Klassen, jedoch gehen viele Klassen in Rauschen unter
+
+      Welche Klassen fasst HDBSCAN zusammen, welche trennt es? Wie unterscheiden sich EOM und Leaf darin? (siehe Contingency Matrix)
+	- EOM trennt vor allem grobe Gruppen im Merkmalsraum und fasst dabei mehrere Klassen zusammen, beispielsweise verschiedene Kleidungsstücke beziehungsweise verschiedene Schuharten
+	- Leaf findet feinere dichte Teilbereiche und kann dadurch einzelne Klassen oder Teilgruppen genauer isolieren, allerdings werden viele Datenpunkte als Rauschen eingestuft
+
+      Welches Ergebnis hat den höchsten DBCV? Passt es auch am besten zu den Klassen? Warum kann ein Clustering, das mehrere Klassen zusammenfasst, nach DBVC gut abschneiden? (VL3 F:33)
+	- siehe Durchlauf
+	- DBVC bewertet die Dichtestruktur und nicht die Übereinstimmung mit den Klassen
+	- Ein Clustering kann daher einen hohen DBCV-Wert besitzen, obwohl es mehrere Fashion-MNIST-Klassen in einem Cluster zusammenfasst
+
+      Sehen dieselben Cluster in beiden Layouts gleich aus? Was sagt das über die Layouts? (VL3 F:48, 55, 58)
+	- Die Cluster sehen in t-SNE und UMAP teilweise ähnlich aus, aber nicht vollständig gleich
+	- Viele Cluster sind in beiden Layouts als ähnliche, zusammenhängende Gruppen erkennbar
+	- Manche unterscheiden sich jedoch deutlich in ihrer Form, Größe oder ihrem Abstand zu anderen Clustern
+	- Das liegt daran, dass beide Verfahren die ursprünglichen 64-dimensionalen Embeddings unterschiedlich auf zwei Dimensionen reduzieren
+	- Dabei können bestimmte Strukturen erhalten bleiben, während andere verzerrt werden
+	- Da die Clusterzuordnungen bereits im 64D-Raum berechnet wurden, enthalten die Cluster in beiden Layouts trotzdem dieselben Datenpunkte
+	- Dass viele Cluster ähnlich aussehen, spricht dafür, dass grundlegende Strukturen in beiden Projektionen erhalten bleiben
+	- Die Unterschiede zeigen aber auch, dass man Formen und Abstände in den 2D-Layouts nicht ohne Weiteres auf den ursprünglichen 64D-Raum übertragen kann 
